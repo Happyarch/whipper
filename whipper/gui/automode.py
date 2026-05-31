@@ -1,6 +1,7 @@
 import argparse
 import os
 import pty
+import re
 import select
 import signal
 import subprocess
@@ -16,6 +17,13 @@ _LOG_DIR = os.path.join(
     'whipper', 'logs',
 )
 
+# Matches ANSI/VT100 escape sequences
+_ANSI_RE = re.compile(rb'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
+
+def _strip_ansi(data):
+    return _ANSI_RE.sub(b'', data)
+
 
 def _log_path(device):
     device_tag = os.path.basename(device)
@@ -26,9 +34,6 @@ def _log_path(device):
 def _run(cmd, log_path):
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
-    # Give the child a real PTY for stdout/stderr so it keeps colours and
-    # progress output, then tee the master end to both the VTE terminal and
-    # the log file.
     master_fd, slave_fd = pty.openpty()
 
     with open(log_path, 'ab') as log:
@@ -48,6 +53,24 @@ def _run(cmd, log_path):
         )
         os.close(slave_fd)
 
+        def drain():
+            try:
+                while True:
+                    r, _, _ = select.select([master_fd], [], [], 0.05)
+                    if not r:
+                        break
+                    data = os.read(master_fd, 4096)
+                    if not data:
+                        break
+                    try:
+                        os.write(sys.stdout.fileno(), data)
+                    except OSError:
+                        pass
+                    log.write(_strip_ansi(data))
+                    log.flush()
+            except OSError:
+                pass
+
         while True:
             try:
                 r, _, _ = select.select([master_fd], [], [], 0.05)
@@ -64,26 +87,10 @@ def _run(cmd, log_path):
                     os.write(sys.stdout.fileno(), data)
                 except OSError:
                     pass
-                log.write(data)
+                log.write(_strip_ansi(data))
                 log.flush()
             elif proc.poll() is not None:
-                # Drain any remaining output
-                try:
-                    while True:
-                        r, _, _ = select.select([master_fd], [], [], 0.05)
-                        if not r:
-                            break
-                        data = os.read(master_fd, 4096)
-                        if not data:
-                            break
-                        try:
-                            os.write(sys.stdout.fileno(), data)
-                        except OSError:
-                            pass
-                        log.write(data)
-                        log.flush()
-                except OSError:
-                    pass
+                drain()
                 break
 
     os.close(master_fd)
@@ -100,7 +107,8 @@ def main():
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    cmd = ['whipper', 'cd', 'rip', '--device', args.device]
+    # --device belongs to the 'cd' parent command, not 'rip'
+    cmd = ['whipper', 'cd', '--device', args.device, 'rip']
 
     while True:
         log_path = _log_path(args.device)
