@@ -510,6 +510,11 @@ Log files will log the path to tracks relative to this directory.
                 else:
                     if trackResult.testcrc == trackResult.copycrc:
                         logger.info('CRCs match for track %d', number)
+                    elif trackResult.quality >= 0.925:
+                        logger.warning(
+                            'CRCs did not match for track %d, but rip '
+                            'quality %.2f%% meets threshold; saving track',
+                            number, trackResult.quality * 100)
                     else:
                         raise RuntimeError(
                             "CRCs did not match for track %d" % number
