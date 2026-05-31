@@ -484,17 +484,20 @@ Log files will log the path to tracks relative to this directory.
                 # we reset durations for test and copy here
                 trackResult.testduration = 0.0
                 trackResult.copyduration = 0.0
-                extra = ""
-                tries = 1
-                while tries <= self.options.max_retries:
-                    if tries > 1:
-                        extra = " (try %d)" % tries
+
+                # ── Retry loop ────────────────────────────────────────────
+                rip_ok = False   # True if ripTrack returned without exception
+                attempt = 0
+                max_retries = self.options.max_retries  # may be float("inf")
+                while True:
+                    attempt += 1
+                    extra = " (try %d)" % attempt if attempt > 1 else ""
                     logger.info('ripping track %d of %d%s: %s',
                                 number, len(self.itable.tracks), extra,
                                 os.path.basename(path))
+                    logger.debug('ripIfNotRipped: track %d, attempt %d',
+                                 number, attempt)
 
-                    logger.debug('ripIfNotRipped: track %d, try %d', number,
-                                 tries)
                     tag_list = self.program.getTagList(number, self.mbdiscid)
                     # An HTOA can't have an ISRC value
                     if (number > 0 and
@@ -502,72 +505,90 @@ Log files will log the path to tracks relative to this directory.
                         tag_list['ISRC'] = self.itable.tracks[number - 1].isrc
 
                     try:
-                        self.program.ripTrack(self.runner, trackResult,
-                                              offset=int(self.options.offset),
-                                              device=self.device,
-                                              taglist=tag_list,
-                                              overread=self.options.overread,
-                                              what='track %d of %d%s' % (
-                                                  number,
-                                                  len(self.itable.tracks),
-                                                  extra),
-                                              coverArtPath=self.coverArtPath)
+                        self.program.ripTrack(
+                            self.runner, trackResult,
+                            offset=int(self.options.offset),
+                            device=self.device,
+                            taglist=tag_list,
+                            overread=self.options.overread,
+                            what='track %d of %d%s' % (
+                                number, len(self.itable.tracks), extra),
+                            coverArtPath=self.coverArtPath)
+                        rip_ok = True
                         break
                     # FIXME: catching too general exception (Exception)
                     except Exception as e:
-                        logger.debug('got exception %r on try %d', e, tries)
-                        tries += 1
+                        logger.debug('got exception %r on attempt %d',
+                                     e, attempt)
+                        if attempt >= max_retries:
+                            logger.critical(
+                                'giving up on track %d after %d attempt(s)',
+                                number, attempt)
+                            break
 
-                _quality_rescued = False
-                if tries > self.options.max_retries:
-                    tries -= 1
-                    logger.critical('giving up on track %d after %d times',
-                                    number, tries)
-                    if (trackResult.quality >= self.options.quality_threshold
-                            and os.path.exists(path)):
+                # ── Determine outcome ─────────────────────────────────────
+                # Guard against quality being None if no attempt completed.
+                quality = trackResult.quality or 0.0
+                threshold = self.options.quality_threshold
+
+                if rip_ok:
+                    # ripTrack returned without raising — CRCs always match
+                    # in this code path (cdparanoia raises on mismatch).
+                    outcome = 'crc_match'
+                elif os.path.exists(path) and quality >= threshold:
+                    # All attempts raised but the last rescued .part was moved
+                    # to 'path' by program.py's exception handler, and quality
+                    # meets the acceptance threshold.
+                    outcome = 'quality_rescued'
+                elif self.options.keep_going:
+                    outcome = 'skip'
+                else:
+                    outcome = 'fail'
+
+                logger.debug(
+                    'track %d: outcome=%s rip_ok=%s quality=%.4f '
+                    'threshold=%.4f file_exists=%s',
+                    number, outcome, rip_ok, quality, threshold,
+                    os.path.exists(path))
+
+                match outcome:
+                    case 'crc_match':
+                        logger.info('CRCs match for track %d', number)
+                        print('Peak level: %.6f'
+                              % (trackResult.peak / 32768.0))
+                        print('Rip quality: {:.2%}'.format(
+                            trackResult.quality))
+
+                    case 'quality_rescued':
                         logger.warning(
                             'track %d: rip attempts exhausted but quality '
                             '%.2f%% meets threshold (%.2f%%); saving track',
-                            number, trackResult.quality * 100,
-                            self.options.quality_threshold * 100)
-                        _quality_rescued = True
-                    elif self.options.keep_going:
-                        logger.warning("track %d failed to rip.", number)
-                        logger.debug("adding %s to skipped_tracks",
+                            number, quality * 100, threshold * 100)
+                        print('Peak level: %.6f'
+                              % (trackResult.peak / 32768.0))
+                        print('Rip quality: {:.2%}'.format(
+                            trackResult.quality))
+
+                    case 'skip':
+                        logger.warning('track %d failed to rip, skipping.',
+                                       number)
+                        logger.debug('adding %s to skipped_tracks',
                                      trackResult)
                         self.skipped_tracks.append(trackResult)
-                        logger.debug("skipped_tracks = %s",
+                        logger.debug('skipped_tracks = %s',
                                      self.skipped_tracks)
                         trackResult.skipped = True
-                    else:
-                        raise RuntimeError("track can't be ripped. "
-                                           "Rip attempts number is equal "
-                                           "to {}".format(self.options.max_retries))
-                if trackResult in self.skipped_tracks:
-                    print("Skipping CRC comparison for track %d "
-                          "due to rip failure" % number)
-                elif _quality_rescued:
-                    # CRCs are unreliable when all attempts raised; quality
-                    # threshold was the deciding factor — skip CRC check.
-                    print('Peak level: %.6f' % (trackResult.peak / 32768.0))
-                    print('Rip quality: {:.2%}'.format(trackResult.quality))
-                else:
-                    if trackResult.testcrc == trackResult.copycrc:
-                        logger.info('CRCs match for track %d', number)
-                    elif trackResult.quality >= self.options.quality_threshold:
-                        logger.warning(
-                            'CRCs did not match for track %d, but rip '
-                            'quality %.2f%% meets threshold (%.2f%%); '
-                            'saving track',
-                            number, trackResult.quality * 100,
-                            self.options.quality_threshold * 100)
-                    else:
-                        raise RuntimeError(
-                            "CRCs did not match for track %d" % number
-                        )
+                        print("Skipping CRC comparison for track %d "
+                              "due to rip failure" % number)
 
-                    print('Peak level: %.6f' % (trackResult.peak / 32768.0))
-                    print('Rip quality: {:.2%}'.format(trackResult.quality))
+                    case 'fail':
+                        raise RuntimeError(
+                            "track %d can't be ripped after %s attempt(s). "
+                            "quality=%.2f%% threshold=%.2f%% "
+                            "file_exists=%s" % (
+                                number, attempt,
+                                quality * 100, threshold * 100,
+                                os.path.exists(path)))
 
             # overlay this rip onto the Table
             if number == 0:

@@ -147,8 +147,8 @@ def main():
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    # --device belongs to 'whipper cd', not 'whipper cd rip'
-    cmd = ['whipper', 'cd', '--device', args.device, 'rip']
+    # --device belongs to 'whipper cd'; --prompt enables manual release selection
+    cmd = ['whipper', 'cd', '--device', args.device, 'rip', '--prompt']
 
     while True:
         _wait_for_disc(args.device)

@@ -643,6 +643,16 @@ class Program:
                 trackResult.copycrc = t.copychecksum
             except AttributeError:
                 pass
+            # When the task kept the .part file (CRC mismatch with intact
+            # FLAC), move it to the final path so os.path.exists(path) is
+            # True for the quality-threshold rescue check in cd.py.
+            if t.part_rescuable and t._tmppath and os.path.exists(t._tmppath):
+                try:
+                    shutil.move(t._tmppath, t.path)
+                    trackResult.filename = t.path
+                    logger.debug('moved rescued .part to %r', t.path)
+                except Exception as move_err:
+                    logger.debug('could not move .part: %s', move_err)
             raise
 
         logger.debug('ripped track')

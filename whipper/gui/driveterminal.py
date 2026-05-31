@@ -64,6 +64,10 @@ class DriveTerminal(Gtk.Box):
         logger.debug('spawned whipper-automode for %s as pid %d',
                      self._device, pid)
 
+    def connect_bell(self, callback):
+        """Connect *callback* to the VTE terminal's 'bell' signal."""
+        self._terminal.connect('bell', callback)
+
     def terminate(self):
         if self._child_pid is None:
             return

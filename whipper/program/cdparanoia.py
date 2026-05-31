@@ -438,6 +438,8 @@ class ReadVerifyTrackTask(task.MultiSeparateTask):
 
     _tmpwavpath = None
     _tmppath = None
+    # True when CRC mismatched but FLAC data is intact — caller may rescue it
+    part_rescuable = False
 
     def __init__(self, path, table, start, stop, overread, offset=0,
                  device=None, taglist=None, what="track", coverArtPath=None):
@@ -539,8 +541,13 @@ class ReadVerifyTrackTask(task.MultiSeparateTask):
                                 c1, c2)
                     self.exception = ChecksumException(
                         'read and verify failed: test checksum')
+                    # Mark the .part file as rescuable: the FLAC encoding is
+                    # intact even though the two read passes disagreed.
+                    self.part_rescuable = True
 
                 if self.tasks[5].checksum != self.checksum:
+                    # Encoding is corrupted — discard the rescue flag.
+                    self.part_rescuable = False
                     self.exception = ChecksumException(
                         'Encoding failed, checksum does not match')
 
@@ -556,6 +563,11 @@ class ReadVerifyTrackTask(task.MultiSeparateTask):
                         logger.debug('exception while moving to final '
                                      'path %r: %s', self.path, e)
                         self.exception = e
+                elif self.part_rescuable:
+                    # Keep the .part file so the caller's quality-threshold
+                    # rescue logic can move it to the final path if needed.
+                    logger.debug('keeping .part file for quality rescue: %r',
+                                 self._tmppath)
                 else:
                     os.unlink(self._tmppath)
             else:
