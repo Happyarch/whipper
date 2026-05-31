@@ -3,7 +3,8 @@ import sys
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
+gi.require_version('Gio', '2.0')
+from gi.repository import Gio, Gtk
 
 from whipper.common.config import Config
 from whipper.gui import MAX_DRIVES
@@ -18,7 +19,8 @@ class WhipperGuiApp(Gtk.Application):
 
     def __init__(self):
         super().__init__(
-            application_id='io.github.whipper_team.WhipperGui')
+            application_id='io.github.whipper_team.WhipperGui',
+            flags=Gio.ApplicationFlags.FLAGS_NONE)
 
     def do_activate(self):
         drives = self._load_drives()
@@ -53,4 +55,4 @@ class WhipperGuiApp(Gtk.Application):
 def main():
     logging.basicConfig(level=logging.INFO)
     app = WhipperGuiApp()
-    sys.exit(app.run(sys.argv))
+    sys.exit(app.run(sys.argv[:1]))
