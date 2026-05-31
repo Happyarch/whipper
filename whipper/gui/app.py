@@ -21,6 +21,8 @@ class WhipperGuiApp(Gtk.Application):
             application_id='io.github.whipper_team.WhipperGui')
 
     def do_activate(self):
+        from whipper.gui.integration import ensure_desktop_entry
+        ensure_desktop_entry()
         drives = self._load_drives()
         logger.info('starting GUI with %d drive(s): %s', len(drives), drives)
         MainWindow(self, drives)

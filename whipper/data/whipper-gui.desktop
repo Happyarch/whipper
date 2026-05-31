@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Whipper
+GenericName=CD Ripper
+Comment=Accurate CD-DA ripper — multi-drive auto mode
+Exec=whipper gui
+Icon=media-optical-cd-audio
+Terminal=false
+Categories=AudioVideo;Audio;DiscBurning;
+Keywords=CD;rip;audio;FLAC;AccurateRip;
+StartupNotify=true
