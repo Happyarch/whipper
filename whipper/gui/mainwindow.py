@@ -50,6 +50,7 @@ class MainWindow(Gtk.ApplicationWindow):
             tab_box.add_events(Gdk.EventMask.SCROLL_MASK)
             tab_box.connect('scroll-event',
                             lambda _w, ev: self._on_tab_scroll(ev))
+            tab_box.show_all()  # tab labels must be shown before append_page
 
             notebook.append_page(terminal, tab_box)
             terminal.connect_bell(lambda _t, idx=i: self._on_bell(idx))
