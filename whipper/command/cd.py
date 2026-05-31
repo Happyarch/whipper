@@ -518,11 +518,20 @@ Log files will log the path to tracks relative to this directory.
                         logger.debug('got exception %r on try %d', e, tries)
                         tries += 1
 
+                _quality_rescued = False
                 if tries > self.options.max_retries:
                     tries -= 1
                     logger.critical('giving up on track %d after %d times',
                                     number, tries)
-                    if self.options.keep_going:
+                    if (trackResult.quality >= self.options.quality_threshold
+                            and os.path.exists(path)):
+                        logger.warning(
+                            'track %d: rip attempts exhausted but quality '
+                            '%.2f%% meets threshold (%.2f%%); saving track',
+                            number, trackResult.quality * 100,
+                            self.options.quality_threshold * 100)
+                        _quality_rescued = True
+                    elif self.options.keep_going:
                         logger.warning("track %d failed to rip.", number)
                         logger.debug("adding %s to skipped_tracks",
                                      trackResult)
@@ -537,6 +546,11 @@ Log files will log the path to tracks relative to this directory.
                 if trackResult in self.skipped_tracks:
                     print("Skipping CRC comparison for track %d "
                           "due to rip failure" % number)
+                elif _quality_rescued:
+                    # CRCs are unreliable when all attempts raised; quality
+                    # threshold was the deciding factor — skip CRC check.
+                    print('Peak level: %.6f' % (trackResult.peak / 32768.0))
+                    print('Rip quality: {:.2%}'.format(trackResult.quality))
                 else:
                     if trackResult.testcrc == trackResult.copycrc:
                         logger.info('CRCs match for track %d', number)
