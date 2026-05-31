@@ -545,7 +545,12 @@ class ReadVerifyTrackTask(task.MultiSeparateTask):
                     # intact even though the two read passes disagreed.
                     self.part_rescuable = True
 
-                if self.tasks[5].checksum != self.checksum:
+                # Only verify encoding integrity when both read passes agreed
+                # (self.checksum is set). When CRCs mismatched, self.checksum
+                # is None and the comparison below would always be True,
+                # incorrectly clobbering part_rescuable back to False.
+                if (self.checksum is not None
+                        and self.tasks[5].checksum != self.checksum):
                     # Encoding is corrupted — discard the rescue flag.
                     self.part_rescuable = False
                     self.exception = ChecksumException(

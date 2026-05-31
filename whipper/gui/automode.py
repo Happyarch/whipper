@@ -26,6 +26,9 @@ _CDS_DISC_OK = 4
 # Matches ANSI/VT100 escape sequences
 _ANSI_RE = re.compile(rb'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
+# Poll timeout (ms) — fallback in case the kernel doesn't send POLLPRI
+_POLL_TIMEOUT_MS = 2000
+
 
 def _strip_ansi(data):
     return _ANSI_RE.sub(b'', data)
@@ -43,26 +46,44 @@ def _disc_present(device):
         return False
 
 
-def _wait_for_disc(device):
-    if _disc_present(device):
-        return
-    print('Waiting for disc in %s…' % device)
+def _poll_device(device, condition):
+    """Block until condition(device) becomes True, using POLLPRI + timeout."""
     try:
         fd = os.open(device, os.O_RDONLY | os.O_NONBLOCK)
         try:
             poller = select.poll()
-            # The Linux CD-ROM driver raises POLLPRI|POLLERR on media change
-            # (both insertion and ejection), so we re-check after each event.
+            # The Linux CD-ROM driver raises POLLPRI|POLLERR on media change.
             poller.register(fd, select.POLLPRI | select.POLLERR)
-            while not _disc_present(device):
-                poller.poll()
+            while not condition(device):
+                poller.poll(_POLL_TIMEOUT_MS)
         finally:
             os.close(fd)
     except OSError:
-        # Fall back to polling if the device can't be opened
-        while not _disc_present(device):
+        while not condition(device):
             time.sleep(2)
+
+
+def _wait_for_disc(device):
+    if _disc_present(device):
+        return
+    print('Waiting for disc in %s…' % device)
+    _poll_device(device, _disc_present)
     print('Disc detected.')
+
+
+def _wait_for_removal(device):
+    if not _disc_present(device):
+        return
+    print('Waiting for disc removal from %s…' % device)
+    _poll_device(device, lambda d: not _disc_present(d))
+    print('Disc removed.')
+
+
+def _eject(device):
+    try:
+        subprocess.run(['eject', device], check=False, timeout=10)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        print('  (eject failed: %s)' % e)
 
 
 def _log_path(device):
@@ -159,12 +180,15 @@ def main():
         print()
         print('─' * 54)
         if exit_code == 0:
-            # Bell: disc finished successfully
             print('\a', end='', flush=True)
-            print('  Rip complete. Disc ejected.')
+            print('  Rip complete.')
         else:
             print('  whipper exited (code %d).' % exit_code)
         print('  Log: %s' % log_path)
-        print('  Waiting for next disc…')
         print('─' * 54)
-        time.sleep(3)
+
+        # Eject on any exit so the user can insert the next disc.
+        # On success whipper may have already ejected; calling eject again
+        # is harmless. On failure it ensures we don't restart on the same disc.
+        _eject(args.device)
+        _wait_for_removal(args.device)
