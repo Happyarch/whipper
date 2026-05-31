@@ -28,10 +28,15 @@ class MainWindow(Gtk.ApplicationWindow):
         self._labels = []         # Gtk.Label per tab
         self._flash_timeouts = {} # tab_idx → GLib source id
         self._flash_states = {}   # tab_idx → bool (True = bright phase)
-        self._last_tab_switch_us = 0  # GLib monotonic time of last switch
 
         notebook = Gtk.Notebook()
         notebook.set_tab_pos(Gtk.PositionType.TOP)
+        # Receive scroll events on the tab bar. Gtk.Label doesn't capture
+        # scroll, so events over tab labels bubble up to the notebook.
+        # VTE consumes its own scroll events so the terminal area is unaffected.
+        notebook.add_events(Gdk.EventMask.SCROLL_MASK)
+        notebook.connect('scroll-event',
+                         lambda _nb, ev: self._on_tab_scroll(ev))
         self._notebook = notebook
         self.add(notebook)
 
@@ -42,18 +47,10 @@ class MainWindow(Gtk.ApplicationWindow):
             label = Gtk.Label()
             label.set_markup(_MARKUP_NORMAL % (i + 1, device))
             label.set_justify(Gtk.Justification.CENTER)
+            label.show()
             self._labels.append(label)
 
-            # Wrap label in EventBox so scroll events on the tab bar are
-            # captured here rather than falling through to the terminal.
-            tab_box = Gtk.EventBox()
-            tab_box.add(label)
-            tab_box.add_events(Gdk.EventMask.SCROLL_MASK)
-            tab_box.connect('scroll-event',
-                            lambda _w, ev: self._on_tab_scroll(ev))
-            tab_box.show_all()  # tab labels must be shown before append_page
-
-            notebook.append_page(terminal, tab_box)
+            notebook.append_page(terminal, label)
             terminal.connect_bell(lambda _t, idx=i: self._on_bell(idx))
 
         notebook.connect('switch-page', self._on_switch_page)
@@ -70,14 +67,6 @@ class MainWindow(Gtk.ApplicationWindow):
     # ── Tab scroll-to-switch ──────────────────────────────────────────────
 
     def _on_tab_scroll(self, event):
-        # Debounce: ignore events within 250 ms of the last switch to prevent
-        # a single scroll gesture from triggering multiple page changes and
-        # causing the tab bar to flicker/shake on redraw.
-        now = GLib.get_monotonic_time()
-        if now - self._last_tab_switch_us < 250_000:
-            return True
-        self._last_tab_switch_us = now
-
         nb = self._notebook
         if event.direction == Gdk.ScrollDirection.UP:
             nb.prev_page()
