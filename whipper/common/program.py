@@ -331,21 +331,21 @@ class Program:
 
             print('\nMatching releases:')
 
-            for metadata in metadatas:
-                print('\nArtist   : %s' % metadata.artist)
-                print('Title    : %s' % metadata.releaseTitle)
-                print('Duration : %s' % common.formatTime(
-                                           metadata.duration / 1000.0))
-                print('URL      : %s' % metadata.url)
-                print('Release  : %s' % metadata.mbid)
-                print('Type     : %s' % metadata.releaseType)
+            for i, metadata in enumerate(metadatas, 1):
+                print('\n[%d] Artist   : %s' % (i, metadata.artist))
+                print('    Title    : %s' % metadata.releaseTitle)
+                print('    Duration : %s' % common.formatTime(
+                                               metadata.duration / 1000.0))
+                print('    URL      : %s' % metadata.url)
+                print('    Release  : %s' % metadata.mbid)
+                print('    Type     : %s' % metadata.releaseType)
                 if metadata.barcode:
-                    print("Barcode  : %s" % metadata.barcode)
+                    print("    Barcode  : %s" % metadata.barcode)
                 if metadata.countries:
-                    print("Country  : %s" % ', '.join(metadata.countries))
+                    print("    Country  : %s" % ', '.join(metadata.countries))
                 # TODO: Add test for non ASCII catalog numbers: see issue #215
                 if metadata.catalogNumbers:
-                    print("Cat no(s): %s" % ', '.join(metadata.catalogNumbers))
+                    print("    Cat no(s): %s" % ', '.join(metadata.catalogNumbers))
 
                 delta = abs(metadata.duration - ittoc.duration())
                 if delta not in deltas:
@@ -359,15 +359,37 @@ class Program:
                 lowest = min(list(deltas))
 
                 if prompt:
-                    guess = (deltas[lowest])[0].mbid
-                    print("\nPlease select a release. You only need to match "
-                          "the last few characters.")
-                    release = input(
-                        "With no input the release will be [%s]: " %
-                        guess).lower()
-
-                    if not release:
-                        release = guess
+                    guess_mbid = (deltas[lowest])[0].mbid
+                    guess_idx = next(
+                        i for i, m in enumerate(metadatas, 1)
+                        if m.mbid == guess_mbid)
+                    # Ring bell — manual selection required
+                    print('\a', end='', flush=True)
+                    print("\nEnter a number (1-%d), a MusicBrainz release ID, "
+                          "or press Enter to accept [%d]:"
+                          % (len(metadatas), guess_idx))
+                    while True:
+                        response = input("Selection: ").strip()
+                        if not response:
+                            release = guess_mbid
+                            break
+                        try:
+                            n = int(response)
+                            if 1 <= n <= len(metadatas):
+                                release = metadatas[n - 1].mbid
+                                break
+                            print("Please enter a number between 1 and %d."
+                                  % len(metadatas))
+                        except ValueError:
+                            resp_l = response.lower()
+                            matches = [m for m in metadatas
+                                       if m.mbid.lower() == resp_l
+                                       or m.url.lower().endswith(resp_l)]
+                            if matches:
+                                release = matches[0].mbid
+                                break
+                            print("'%s' did not match any release. "
+                                  "Try again." % response)
 
             if release:
                 metadatas = [m for m in metadatas if m.url.endswith(release)]
