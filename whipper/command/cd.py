@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 SILENT = 0
 DEFAULT_MAX_RETRIES = 5
+DEFAULT_QUALITY_THRESHOLD = 0.925
 
 DEFAULT_TRACK_TEMPLATE = '%r/%A - %d/%t. %a - %n'
 DEFAULT_DISC_TEMPLATE = '%r/%A - %d/%A - %d'
@@ -326,6 +327,16 @@ Log files will log the path to tracks relative to this directory.
                                  help="continue ripping further tracks "
                                  "instead of giving up if a track "
                                  "can't be ripped")
+        self.parser.add_argument('-q', '--quality-threshold',
+                                 action="store", dest="quality_threshold",
+                                 type=float,
+                                 help="minimum rip quality (0.0-1.0) to "
+                                 "accept a track when test and copy CRCs "
+                                 "do not match. Defaults to {:.1%}; can "
+                                 "also be set via 'quality_threshold' in "
+                                 "the [whipper.cd.rip] config "
+                                 "section.".format(DEFAULT_QUALITY_THRESHOLD),
+                                 default=DEFAULT_QUALITY_THRESHOLD)
 
     def handle_arguments(self):
         self.options.output_directory = os.path.expanduser(
@@ -364,6 +375,15 @@ Log files will log the path to tracks relative to this directory.
             self.options.max_retries = float("inf")
         elif self.options.max_retries < 0:
             raise ValueError("number of max retries must be positive")
+
+        try:
+            self.options.quality_threshold = float(
+                self.options.quality_threshold)
+        except (TypeError, ValueError):
+            raise ValueError("quality threshold must be a number")
+        if not 0.0 <= self.options.quality_threshold <= 1.0:
+            raise ValueError(
+                "quality threshold must be between 0.0 and 1.0")
 
     def doCommand(self):
         self.program.setWorkingDirectory(self.options.working_directory)
@@ -510,11 +530,13 @@ Log files will log the path to tracks relative to this directory.
                 else:
                     if trackResult.testcrc == trackResult.copycrc:
                         logger.info('CRCs match for track %d', number)
-                    elif trackResult.quality >= 0.925:
+                    elif trackResult.quality >= self.options.quality_threshold:
                         logger.warning(
                             'CRCs did not match for track %d, but rip '
-                            'quality %.2f%% meets threshold; saving track',
-                            number, trackResult.quality * 100)
+                            'quality %.2f%% meets threshold (%.2f%%); '
+                            'saving track',
+                            number, trackResult.quality * 100,
+                            self.options.quality_threshold * 100)
                     else:
                         raise RuntimeError(
                             "CRCs did not match for track %d" % number
