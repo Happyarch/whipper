@@ -630,7 +630,20 @@ class Program:
                                            what=what,
                                            coverArtPath=coverArtPath)
 
-        runner.run(t)
+        try:
+            runner.run(t)
+        except Exception:
+            # Copy whatever quality data the task managed to collect before
+            # failing so that the caller's quality-threshold fallback can use
+            # it even when all retry attempts raised.
+            try:
+                trackResult.quality = t.quality
+                trackResult.peak = t.peak
+                trackResult.testcrc = t.testchecksum
+                trackResult.copycrc = t.copychecksum
+            except AttributeError:
+                pass
+            raise
 
         logger.debug('ripped track')
         logger.debug('test speed %.3f/%.3f seconds',
