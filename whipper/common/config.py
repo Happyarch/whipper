@@ -157,3 +157,18 @@ class Config:
         section = self._findOrCreateDriveSection(vendor, model, release)
         self._parser.set(section, key, str(value))
         self.write()
+
+    # gui section
+
+    def get_gui_drives(self):
+        """Return the list of drive device paths configured for the GUI.
+
+        Reads the ``drives`` key from the ``[gui]`` section, which should be
+        a comma-separated list of device paths (e.g. ``/dev/sr0, /dev/sr1``).
+        Returns an empty list when the section or key is absent so that the
+        caller can apply its own default.
+        """
+        raw = self.get('gui', 'drives')
+        if not raw:
+            return []
+        return [d.strip() for d in raw.split(',') if d.strip()]

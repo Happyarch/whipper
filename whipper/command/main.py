@@ -5,7 +5,7 @@ import os
 import sys
 import musicbrainzngs
 import whipper
-from whipper.command import cd, offset, drive, image, accurip, mblookup
+from whipper.command import cd, offset, drive, gui, image, accurip, mblookup
 from whipper.command.basecommand import BaseCommand
 from whipper.common import common, config
 from whipper.extern.task import task
@@ -79,6 +79,7 @@ class Whipper(BaseCommand):
         'accurip': accurip.AccuRip,
         'cd': cd.CD,
         'drive': drive.Drive,
+        'gui': gui.GUI,
         'offset': offset.Offset,
         'image': image.Image,
         'mblookup': mblookup.MBLookup

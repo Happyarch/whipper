@@ -38,6 +38,7 @@ docs = ["docutils"]
 
 [project.scripts]
 whipper = "whipper.command.main:main"
+whipper-automode = "whipper.gui.automode:main"
 
 # This is necessary, since whipper uses a flat-layout, but has as a 'src'
 # directory and setuptools gets confused otherwise.
