@@ -47,8 +47,21 @@ def _wait_for_disc(device):
     if _disc_present(device):
         return
     print('Waiting for disc in %s…' % device)
-    while not _disc_present(device):
-        time.sleep(2)
+    try:
+        fd = os.open(device, os.O_RDONLY | os.O_NONBLOCK)
+        try:
+            poller = select.poll()
+            # The Linux CD-ROM driver raises POLLPRI|POLLERR on media change
+            # (both insertion and ejection), so we re-check after each event.
+            poller.register(fd, select.POLLPRI | select.POLLERR)
+            while not _disc_present(device):
+                poller.poll()
+        finally:
+            os.close(fd)
+    except OSError:
+        # Fall back to polling if the device can't be opened
+        while not _disc_present(device):
+            time.sleep(2)
     print('Disc detected.')
 
 
