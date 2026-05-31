@@ -327,6 +327,15 @@ Log files will log the path to tracks relative to this directory.
                                  help="continue ripping further tracks "
                                  "instead of giving up if a track "
                                  "can't be ripped")
+        self.parser.add_argument('--no-cue',
+                                 action='store_true', dest='no_cue',
+                                 default=False,
+                                 help="do not write a .cue file for the disc")
+        self.parser.add_argument('--no-m3u',
+                                 action='store_true', dest='no_m3u',
+                                 default=False,
+                                 help="do not write a .m3u playlist for "
+                                 "the disc")
         self.parser.add_argument('-q', '--quality-threshold',
                                  action="store", dest="quality_threshold",
                                  type=float,
@@ -596,11 +605,17 @@ Log files will log the path to tracks relative to this directory.
             logger.debug('deleting cover art file at: %r', self.coverArtPath)
             os.remove(self.coverArtPath)
 
-        logger.debug('writing cue file for %r', discName)
-        self.program.writeCue(discName)
+        if not self.options.no_cue:
+            logger.debug('writing cue file for %r', discName)
+            self.program.writeCue(discName)
+        else:
+            logger.debug('skipping cue file (--no-cue)')
 
-        logger.debug('writing m3u file for %r', discName)
-        self.program.write_m3u(discName)
+        if not self.options.no_m3u:
+            logger.debug('writing m3u file for %r', discName)
+            self.program.write_m3u(discName)
+        else:
+            logger.debug('skipping m3u file (--no-m3u)')
 
         if len(self.skipped_tracks) > 0:
             logger.warning("the generated cue sheet references %d track(s) "
@@ -608,10 +623,13 @@ Log files will log the path to tracks relative to this directory.
                            "won't be available", len(self.skipped_tracks))
             self.program.skipped_tracks = self.skipped_tracks
 
-        try:
-            self.program.verifyImage(self.runner, self.itable)
-        except accurip.EntryNotFound:
-            logger.warning('AccurateRip entry not found')
+        if self.options.no_cue:
+            logger.debug('skipping AccurateRip image verify (no cue file)')
+        else:
+            try:
+                self.program.verifyImage(self.runner, self.itable)
+            except accurip.EntryNotFound:
+                logger.warning('AccurateRip entry not found')
 
         accurip.print_report(self.program.result)
 
