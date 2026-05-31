@@ -28,6 +28,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self._labels = []         # Gtk.Label per tab
         self._flash_timeouts = {} # tab_idx → GLib source id
         self._flash_states = {}   # tab_idx → bool (True = bright phase)
+        self._last_tab_switch_us = 0  # GLib monotonic time of last switch
 
         notebook = Gtk.Notebook()
         notebook.set_tab_pos(Gtk.PositionType.TOP)
@@ -69,6 +70,14 @@ class MainWindow(Gtk.ApplicationWindow):
     # ── Tab scroll-to-switch ──────────────────────────────────────────────
 
     def _on_tab_scroll(self, event):
+        # Debounce: ignore events within 250 ms of the last switch to prevent
+        # a single scroll gesture from triggering multiple page changes and
+        # causing the tab bar to flicker/shake on redraw.
+        now = GLib.get_monotonic_time()
+        if now - self._last_tab_switch_us < 250_000:
+            return True
+        self._last_tab_switch_us = now
+
         nb = self._notebook
         if event.direction == Gdk.ScrollDirection.UP:
             nb.prev_page()
