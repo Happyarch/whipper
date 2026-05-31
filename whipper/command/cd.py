@@ -341,10 +341,11 @@ Log files will log the path to tracks relative to this directory.
                                  type=float,
                                  help="minimum rip quality (0.0-1.0) to "
                                  "accept a track when test and copy CRCs "
-                                 "do not match. Defaults to {:.1%}; can "
+                                 "do not match. Defaults to {:.1f}%%; can "
                                  "also be set via 'quality_threshold' in "
                                  "the [whipper.cd.rip] config "
-                                 "section.".format(DEFAULT_QUALITY_THRESHOLD),
+                                 "section.".format(
+                                     DEFAULT_QUALITY_THRESHOLD * 100),
                                  default=DEFAULT_QUALITY_THRESHOLD)
 
     def handle_arguments(self):
